@@ -1,5 +1,4 @@
-# Container specification - packages the app into an image.
-FROM python:3.11-slim
+FROM python:3.11-alpine
 WORKDIR /app
 COPY app.py .
-CMD ["python", "app.py"]
+CMD ["python", "-c", "from app import greet; print(greet('DevOps'))"]

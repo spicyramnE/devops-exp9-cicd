@@ -1,0 +1,38 @@
+version: 0.2
+
+# CodeBuild execution blueprint.
+# Stages: install deps -> lint -> unit tests -> docker build -> push to ECR.
+# A failing unit test makes pytest exit non-zero, which fails the build and
+# halts the pipeline before any image is pushed.
+
+phases:
+  install:
+    runtime-versions:
+      python: 3.11
+    commands:
+      - echo Installing dependencies...
+      - pip install --quiet pytest flake8
+
+  pre_build:
+    commands:
+      - echo Logging in to Amazon ECR...
+      - aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $ECR_URI
+      - COMMIT_SHA=$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION | cut -c 1-7)
+      - echo Commit tag is $COMMIT_SHA
+
+  build:
+    commands:
+      - echo "[1/3] Linting..."
+      - flake8 app.py --max-line-length=120 || true
+      - echo "[2/3] Running unit tests..."
+      - pytest -v
+      - echo "[3/3] Building Docker image..."
+      - docker build -t $ECR_URI:$COMMIT_SHA .
+      - docker tag $ECR_URI:$COMMIT_SHA $ECR_URI:latest
+
+  post_build:
+    commands:
+      - echo Pushing image to ECR...
+      - docker push $ECR_URI:$COMMIT_SHA
+      - docker push $ECR_URI:latest
+      - echo Build and push complete. Image tagged $COMMIT_SHA
